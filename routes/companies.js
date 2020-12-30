@@ -17,7 +17,7 @@ router.post('/', async (req, res, next) => {
     try{
         const {code, name, description} = req.body;
         const results = await db.query('INSERT INTO companies (code, name, description) VALUES ($1, $2, $3) RETURNING *', [code, name, description])
-        return res.json({company: results.rows})
+        return res.status(201).json({company: results.rows[0]})
     } catch(e){
         return next(e)
     }
@@ -27,16 +27,13 @@ router.get('/:code', async (req, res, next) => {
     try{
         const {code} = req.params
         const compResult = await db.query(
-            `SELECT code, name, description
-             FROM companies
-             WHERE code = $1`,
-          [code]
-      );
-  
-      const invResult = await db.query(
-            `SELECT id
-             FROM invoices
-             WHERE comp_code = $1`,
+            `SELECT c.code, c.name, c.description, i.id, ind.industry
+             FROM companies as c
+             LEFT JOIN industries as ind
+             on c.code = ind.comp_code
+             LEFT JOIN invoices as i
+             on c.code = i.comp_code
+             WHERE c.code = $1`,
           [code]
       );
         if (compResult.rows.length === 0){
@@ -44,9 +41,11 @@ router.get('/:code', async (req, res, next) => {
         }
 
         const company = compResult.rows[0]
-        const invoices = invResult.rows;
 
-        company.invoices = invoices.map(inv => inv.id);
+        company.invoices = compResult.rows.map(inv => inv.id);
+        let industries = [...new Set(compResult.rows.map(res => res.industry))]
+        console.log(industries)
+        company.industry = industries
 
         return res.json({company: company})
     } catch(e){
